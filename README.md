@@ -10,7 +10,7 @@
 - **Dataset:** We manually annotated the feature datasets for eight metabolomic and five proteomic datasets, including 4419 concensus feature and 85084 feature peak with associated m/z, RT, and peak area information. These comprehensively annotated datasets serve as valuable benchmarks for evaluating feature detection, quantification, and alignment accuracy.
 
 ## Trend-Aligner workflow
-
+![Image](https://github.com/user-attachments/assets/2cf19cc6-518f-4425-ae32-8babb55a2f69)
 
 
 ## Datasets
@@ -134,7 +134,5 @@ For any questions involving Trend-Aligner, please contact us by email.
 Ruimin Wang, ruimin.wang@yale.edu
 
 Shouyang Ren, ren_shouyang@163.com
-
-Etienne Caron, etienne.caron@yale.edu
 
 Changbin Yu, yu_lab@sdfmu.edu.cn
