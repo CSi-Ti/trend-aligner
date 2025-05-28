@@ -1,0 +1,28 @@
+# Result File Reading Params
+	result_file_path: D:\workspace\trend-align\demo\metapro_example
+	skip_line: 0
+	mz_col_num: 1
+	rt_col_num: 2
+	area_col_num: 3
+
+# Coarse Registration Params
+	centric_idx: 0
+	mz_tolerance: 0.005
+	rt_tolerance: 1
+	use_ppm: False
+	from_rt: 0
+	to_rt: inf
+	frac: tPRESS
+
+# Fine Assignment Params
+	beam_mz_tol: 0.005
+	beam_rt_tol: 0.2
+	match_mz_tol: 0.02
+	match_rt_tol: 0.2
+	max_rt_tol: 1
+	use_ppm: False
+	beam_width: 1
+	mz_factor: 1
+	rt_factor: 1
+	area_factor: 0
+

@@ -1,0 +1,267 @@
+---
+title: 'R Notebook'
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Load XCMS library
+```{r warning=FALSE}
+library(xcms)
+library(SummarizedExperiment)
+library(BiocParallel)
+register(SerialParam())
+```
+
+
+Define functions
+```{r warning=FALSE}
+load_mzml <- function(mzml_path) {
+  mzmls <- list.files(path = mzml_path, pattern = '.mzML',recursive = TRUE,full.names = TRUE)
+  pd <- data.frame(sample_name = sub(basename(mzmls), pattern = '.mzML', replacement = '', fixed = TRUE), stringsAsFactors = FALSE)
+  xdata <- readMSData(files = mzmls, pdata = new('NAnnotatedDataFrame',pd),mode = 'onDisk')
+  return(xdata)
+}
+
+
+
+load_peak_ranges <- function(result_path, tolerance) {
+  result_data <- read.table(result_path, header=FALSE, sep=',')
+  range_data <- result_data[, c(4:7)]
+  range_data[, 1] <- range_data[, 1] - tolerance
+  range_data[, 2] <- range_data[, 2] + tolerance
+  range_data[, 3] <- range_data[, 3] * 60 - tolerance
+  range_data[, 4] <- range_data[, 4] * 60 + tolerance
+  
+  anno_ranges <- c()
+  for (i in 1:nrow(range_data)) {
+    anno_ranges <- c(anno_ranges, c(t(range_data[i,])))
+  }
+  colnames = c('mzmin', 'mzmax', 'rtmin', 'rtmax')
+  peak_ranges <- matrix(anno_ranges, nrow = nrow(result_data), byrow = TRUE, dimnames = list(NULL, colnames))
+  return(peak_ranges)
+}
+
+
+load_peak_data <- function(result_path) {
+  result_data <- read.table(result_path, header=FALSE, sep=',')
+  peak_data <- result_data[, c(1:3)]
+  peak_data[, 2] <- peak_data[, 2] * 60
+  return(peak_data)
+}
+
+
+extract_peaks <- function(xdata, result_path, samples, tolerance = 1) {
+  start_idx <- 0
+  for (i in 1:length(samples)) {
+    result_full_path <- paste0(result_path, samples[i], '.csv')
+    peak_ranges <- load_peak_ranges(result_full_path, tolerance)
+    peak_data <- load_peak_data(result_full_path)
+    
+    xdata <- manualChromPeaks(xdata, peak_ranges, i)
+    chromPeaks(xdata)[(start_idx + 1):(start_idx + nrow(peak_ranges)), c('mz', 'rt', 'into')] <- unlist(peak_data)
+    start_idx <- start_idx + nrow(peak_ranges)
+  }
+  
+  return(xdata)
+}
+
+
+group_align <- function(xdata, bw, binsize) {
+  pdp <- PeakDensityParam(minFraction = 0.9, bw = bw, binSize = binsize, sampleGroups = c(1:length(fileNames(xdata))))
+  xdata <- groupChromPeaks(xdata, param = pdp)
+  pgp <- PeakGroupsParam(minFraction = 0.9)
+  xdata <- adjustRtime(xdata, param = pgp)
+  
+  pdp <- PeakDensityParam(minFraction = 0.5, bw = bw, binSize = binsize, sampleGroups = c(1:length(fileNames(xdata))))
+  grouped <- groupChromPeaks(xdata, param = pdp)
+  return(grouped)
+}
+
+
+obiwarp_align <- function(xdata, profStep, centerSample, bw, binsize) {
+  
+  obi <- ObiwarpParam(binSize = profStep, centerSample)
+  xdata <- adjustRtime(xdata,param = obi)
+  
+  pdp <- PeakDensityParam(minFraction = 0.5, bw = bw, binSize = binsize, sampleGroups = c(1:length(fileNames(xdata))))
+  grouped <- groupChromPeaks(xdata, param = pdp)
+}
+
+
+write_results <- function(grouped, csv_path) {
+  mzs <- assay(quantify(grouped, value='mz'))
+  rts <- assay(quantify(grouped, value='rt')) / 60
+  areas <- assay(quantify(grouped, value='into'))
+
+  result <- data.frame(mz = rowMedians(mzs, na.rm = TRUE), rt = rowMedians(rts, na.rm = TRUE), area = rowMedians(areas, na.rm = TRUE), need_assign = 0)
+  for (name in colnames(mzs)) {
+    result[paste0(name, '_mz')] <- mzs[, name]
+    result[paste0(name, '_rt')] <- rts[, name]
+    result[paste0(name, '_area')] <- areas[, name]
+  }
+  result[is.na(result)] <- 0
+  write.csv(result, csv_path, row.names = FALSE)
+}
+```
+
+
+
+Result paths
+```{r warning=FALSE}
+MTBLS733_QE_HF_metapro = 'E:/workspace/MTBLS733_QE_HF/metapro/'
+MTBLS736_TripleTOF_6600_metapro = 'E:/workspace/MTBLS736_TripleTOF_6600/metapro/'
+MTBLS3038_NEG_metapro = "E:/workspace/MTBLS3038_NEG/metapro/"
+MTBLS3038_POS_metapro = 'E:/workspace/MTBLS3038_POS/metapro/'
+MTBLS5430_Lip_NEG_metapro = 'E:/workspace/MTBLS5430_Lip_NEG/metapro/'
+MTBLS5430_Lip_POS_metapro = 'E:/workspace/MTBLS5430_Lip_POS/metapro/'
+MTBLS5430_Metabo_NEG_metapro = 'E:/workspace/MTBLS5430_Metabo_NEG/metapro/'
+MTBLS5430_Metabo_POS_metapro = 'E:/workspace/MTBLS5430_Metabo_POS/metapro/'
+
+MTBLS733_QE_HF_openms = 'E:/workspace/MTBLS733_QE_HF/openms/'
+MTBLS736_TripleTOF_6600_openms = 'E:/workspace/MTBLS736_TripleTOF_6600/openms/'
+MTBLS3038_NEG_openms = 'E:/workspace/MTBLS3038_NEG/openms/'
+MTBLS3038_POS_openms = 'E:/workspace/MTBLS3038_POS/openms/'
+MTBLS5430_Lip_NEG_openms = 'E:/workspace/MTBLS5430_Lip_NEG/openms/'
+MTBLS5430_Lip_POS_openms = 'E:/workspace/MTBLS5430_Lip_POS/openms/'
+MTBLS5430_Metabo_NEG_openms = 'E:/workspace/MTBLS5430_Metabo_NEG/openms/'
+MTBLS5430_Metabo_POS_openms = 'E:/workspace/MTBLS5430_Metabo_POS/openms/'
+
+MTBLS733_QE_HF_mzmine2 = 'E:/workspace/MTBLS733_QE_HF/mzmine2/'
+MTBLS736_TripleTOF_6600_mzmine2 = 'E:/workspace/MTBLS736_TripleTOF_6600/mzmine2/'
+MTBLS3038_NEG_mzmine2 = 'E:/workspace/MTBLS3038_NEG/mzmine2/'
+MTBLS3038_POS_mzmine2 = 'E:/workspace/MTBLS3038_POS/mzmine2/'
+MTBLS5430_Lip_NEG_mzmine2 = 'E:/workspace/MTBLS5430_Lip_NEG/mzmine2/'
+MTBLS5430_Lip_POS_mzmine2 = 'E:/workspace/MTBLS5430_Lip_POS/mzmine2/'
+MTBLS5430_Metabo_NEG_mzmine2 = 'E:/workspace/MTBLS5430_Metabo_NEG/mzmine2/'
+MTBLS5430_Metabo_POS_mzmine2 = 'E:/workspace/MTBLS5430_Metabo_POS/mzmine2/'
+
+MTBLS733_QE_HF_xcms = 'E:/workspace/MTBLS733_QE_HF/xcms/'
+MTBLS736_TripleTOF_6600_xcms = 'E:/workspace/MTBLS736_TripleTOF_6600/xcms/'
+MTBLS3038_NEG_xcms = 'E:/workspace/MTBLS3038_NEG/xcms/'
+MTBLS3038_POS_xcms = 'E:/workspace/MTBLS3038_POS/xcms/'
+MTBLS5430_Lip_NEG_xcms = 'E:/workspace/MTBLS5430_Lip_NEG/xcms/'
+MTBLS5430_Lip_POS_xcms = 'E:/workspace/MTBLS5430_Lip_POS/xcms/'
+MTBLS5430_Metabo_NEG_xcms = 'E:/workspace/MTBLS5430_Metabo_NEG/xcms/'
+MTBLS5430_Metabo_POS_xcms = 'E:/workspace/MTBLS5430_Metabo_POS/xcms/'
+
+MTBLS733_QE_HF_AntDAS = 'E:/workspace/MTBLS733_QE_HF/AntDAS/'
+MTBLS736_TripleTOF_6600_AntDAS = 'E:/workspace/MTBLS736_TripleTOF_6600/AntDAS/'
+MTBLS3038_NEG_AntDAS = "E:/workspace/MTBLS3038_NEG/AntDAS/"
+MTBLS3038_POS_AntDAS = 'E:/workspace/MTBLS3038_POS/AntDAS/'
+MTBLS5430_Lip_NEG_AntDAS = 'E:/workspace/MTBLS5430_Lip_NEG/AntDAS/'
+MTBLS5430_Lip_POS_AntDAS = 'E:/workspace/MTBLS5430_Lip_POS/AntDAS/'
+MTBLS5430_Metabo_NEG_AntDAS = 'E:/workspace/MTBLS5430_Metabo_NEG/AntDAS/'
+MTBLS5430_Metabo_POS_AntDAS = 'E:/workspace/MTBLS5430_Metabo_POS/AntDAS/'
+
+AT_metapro = 'E:/workspace/AT/metapro/'
+EC_H_metapro = 'E:/workspace/EC_H/metapro/'
+HCC_N_metapro = 'E:/workspace/HCC_N/metapro/'
+UPS_M_metapro = 'E:/workspace/UPS_M/metapro/'
+UPS_Y_metapro = 'E:/workspace/UPS_Y/metapro/'
+Benchmark_FC_metapro = 'E:/workspace/Benchmark_FC/metapro/'
+
+AT_openms = 'E:/workspace/AT/openms/'
+EC_H_openms = 'E:/workspace/EC_H/openms/'
+UPS_M_openms = 'E:/workspace/UPS_M/openms/'
+UPS_Y_openms = 'E:/workspace/UPS_Y/openms/'
+Benchmark_FC_openms = 'E:/workspace/Benchmark_FC/openms/'
+
+AT_mzmine2 = 'E:/workspace/AT/mzmine2/'
+EC_H_mzmine2 = 'E:/workspace/EC_H/mzmine2/'
+UPS_M_mzmine2 = 'E:/workspace/UPS_M/mzmine2/'
+UPS_Y_mzmine2 = 'E:/workspace/UPS_Y/mzmine2/'
+Benchmark_FC_mzmine2 = 'E:/workspace/Benchmark_FC/mzmine2/'
+
+AT_xcms = 'E:/workspace/AT/xcms/'
+EC_H_xcms = 'E:/workspace/EC_H/xcms/'
+UPS_M_xcms = 'E:/workspace/UPS_M/xcms/'
+UPS_Y_xcms = 'E:/workspace/UPS_Y/xcms/'
+Benchmark_FC_xcms = 'E:/workspace/Benchmark_FC/xcms/'
+
+AT_dinosaur = 'E:/workspace/AT/dinosaur/'
+EC_H_dinosaur = 'E:/workspace/EC_H/dinosaur/'
+UPS_M_dinosaur = 'E:/workspace/UPS_M/dinosaur/'
+UPS_Y_dinosaur = 'E:/workspace/UPS_Y/dinosaur/'
+Benchmark_FC_dinosaur = 'E:/workspace/Benchmark_FC/dinosaur/'
+
+AT_maxquant = 'E:/workspace/AT/maxquant/'
+EC_H_maxquant = 'E:/workspace/EC_H/maxquant/'
+UPS_M_maxquant = 'E:/workspace/UPS_M/maxquant/'
+UPS_Y_maxquant = 'E:/workspace/UPS_Y/maxquant/'
+Benchmark_FC_maxquant = 'E:/workspace/Benchmark_FC/maxquant/'
+
+
+MTBLS733_QE_HF_samples = c('SA1', 'SA2', 'SA3', 'SA4', 'SA5', 'SB1', 'SB2', 'SB3', 'SB4', 'SB5')
+MTBLS736_TripleTOF_6600_samples = c('SampleA_1', 'SampleA_2', 'SampleA_3', 'SampleA_4', 'SampleB_1', 'SampleB_2', 'SampleB_3', 'SampleB_4')
+MTBLS3038_NEG_samples = c('12-1G','12-1M','12-2G','12-2M','12-3G','12-3M','12-4G','12-4M','17-1G','17-1M','17-2G','17-2M','17-3G','17-3M', '17-4G','17-4M','2-1G','2-1M','2-2G','2-2M','2-3G','2-3M','2-4G','2-4M','21-1G','21-1M','21-2G','21-2M','21-3G','21-3M','21-4G','21-4M','7-1G','7-1M','7-2G','7-2M','7-3G','7-3M','7-4G','7-4M','QC01','QC02','QC03','QC04','QC05')
+MTBLS3038_POS_samples = c('12-1G','12-1M','12-2G','12-2M','12-3G','12-3M','12-4G','12-4M','17-1G','17-1M','17-2G','17-2M','17-3G','17-3M', '17-4G','17-4M','2-1G','2-1M','2-2G','2-2M','2-3G','2-3M','2-4G','2-4M','21-1G','21-1M','21-2G','21-2M','21-3G','21-3M','21-4G','21-4M','7-1G','7-1M','7-2G','7-2M','7-3G','7-3M','7-4G','7-4M','QC01','QC02','QC03','QC04','QC05')
+MTBLS5430_Lip_NEG_samples = c('BA_1h_1', 'BA_1h_2', 'BA_1h_3', 'BA_24h_1','BA_24h_2', 'BA_24h_3', 'BA_24h_4', 'BA_24h_5', 'BA_3h_1', 'BA_3h_2', 'BA_3h_3', 'BA_6h_1', 'BA_6h_2', 'BA_6h_3', 'BA_Cont1', 'BA_Cont2', 'BA_Cont3','DR_1h_1', 'DR_1h_2', 'DR_1h_3','DR_24h_1', 'DR_24h_2','DR_24h_3', 'DR_3h_1', 'DR_3h_2', 'DR_3h_3', 'DR_6h_1', 'DR_6h_2', 'DR_6h_3', 'DR_Cont1','DR_Cont2', 'DR_Cont3', 'QC1', 'QC2', 'QC3', 'QC4', 'QC5', 'QC6')
+MTBLS5430_Lip_POS_samples = c('BA_1h_1', 'BA_1h_2', 'BA_1h_3', 'BA_24h_1','BA_24h_2', 'BA_24h_3', 'BA_24h_4', 'BA_24h_5', 'BA_3h_1', 'BA_3h_2', 'BA_3h_3', 'BA_6h_1', 'BA_6h_2', 'BA_6h_3', 'BA_Cont1', 'BA_Cont2', 'BA_Cont3','DR_1h_1', 'DR_1h_2', 'DR_1h_3','DR_24h_1', 'DR_24h_2','DR_24h_3', 'DR_3h_1', 'DR_3h_2', 'DR_3h_3', 'DR_6h_1', 'DR_6h_2', 'DR_6h_3', 'DR_Cont1','DR_Cont2', 'DR_Cont3', 'QC1', 'QC2', 'QC3', 'QC4', 'QC5', 'QC6')
+MTBLS5430_Metabo_NEG_samples = c('BA_1h_1', 'BA_1h_2', 'BA_1h_3', 'BA_24h_1','BA_24h_2', 'BA_24h_3', 'BA_24h_4', 'BA_24h_5', 'BA_3h_1', 'BA_3h_2', 'BA_3h_3', 'BA_6h_1', 'BA_6h_2', 'BA_6h_3', 'BA_Cont1', 'BA_Cont2', 'BA_Cont3','DR_1h_1', 'DR_1h_2', 'DR_1h_3','DR_24h_1', 'DR_24h_2','DR_24h_3', 'DR_3h_1', 'DR_3h_2', 'DR_3h_3', 'DR_6h_1', 'DR_6h_2', 'DR_6h_3', 'DR_Cont1','DR_Cont2', 'DR_Cont3', 'QC1', 'QC2', 'QC3', 'QC4', 'QC5', 'QC6')
+MTBLS5430_Metabo_POS_samples = c('BA_1h_1', 'BA_1h_2', 'BA_1h_3', 'BA_24h_1','BA_24h_2', 'BA_24h_3', 'BA_24h_4', 'BA_24h_5', 'BA_3h_1', 'BA_3h_2', 'BA_3h_3', 'BA_6h_1', 'BA_6h_2', 'BA_6h_3', 'BA_Cont1', 'BA_Cont2', 'BA_Cont3','DR_1h_1', 'DR_1h_2', 'DR_1h_3','DR_24h_1', 'DR_24h_2','DR_24h_3', 'DR_3h_1', 'DR_3h_2', 'DR_3h_3', 'DR_6h_1', 'DR_6h_2', 'DR_6h_3', 'DR_Cont1','DR_Cont2', 'DR_Cont3', 'QC1', 'QC2', 'QC3', 'QC4', 'QC5', 'QC6')
+
+AT_samples = c('0_1', '0_2', '0_3', '24_1', '24_2', '24_3', '36_1', '36_2', '36_3', '48_1', '48_2', '48_3', '60_1', '60_2', '60_3', '72_1', '72_2', '72_3')
+EC_H_samples = c('02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21')
+UPS_M_samples = c('A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3')
+UPS_Y_samples = c('A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3')
+Benchmark_FC_samples = c('10_R1','10_R2','10_R3','15_R1','15_R2','15_R3','20_R1','20_R2','20_R3','25_R1','25_R2','25_R3')
+```
+
+
+
+
+```{r eval=FALSE, warning=FALSE}
+data_names <- c("MTBLS5430_Lip_POS", "MTBLS5430_Metabo_NEG", "MTBLS5430_Metabo_POS")  #"MTBLS733_QE_HF", "MTBLS736_TripleTOF_6600"
+feature_sources <- c("metapro", "mzmine2", "openms", "xcms", "AntDAS") 
+
+bws = c(9, 7.5, 4.5)
+binsizes = c(0.06, 0.004, 0.06)
+
+timecost_results <- data.frame(DataName = character(), 
+                                FeatureSource = character(), 
+                                TimeCostSeconds = numeric(), 
+                                stringsAsFactors = FALSE)
+n = 1
+for (data_name in data_names) {
+  data_path <- paste0('E:/workspace/', data_name, '/profile_mzml')
+  data <- load_mzml(mzml_path = data_path)
+  for (feature_source in feature_sources) {
+    
+    featurelist_path = get(paste0(data_name, "_", feature_source))
+    samples_names = get(paste0(data_name, "_samples"))
+    feature_data <- extract_peaks(data, featurelist_path, samples_names, tolerance = tolerance)
+
+    #group_align
+    start_time_group <- Sys.time()
+    data_grouped <- group_align(feature_data, bw= bws[[n]], binsize=binsizes[[n]])
+    write_results(data_grouped, paste0('E:/workspace/', data_name, '_results_', feature_source, '/xcms/', data_name, '_aligned_xcms_group.csv'))
+    end_time_group <- Sys.time()
+    timecost_group <- end_time_group - start_time_group
+    timecost_group_seconds <- as.numeric(timecost_group, units = "secs")
+    result <- paste(data_name, feature_source, timecost_group_seconds, sep = "_")
+    print(result)
+    timecost_results <- rbind(timecost_results, 
+                               data.frame(DataName = data_name, 
+                                          FeatureSource = feature_source, 
+                                          TimeCostSeconds = timecost_group_seconds))
+    # obiwarp_align
+    start_time_obiwarp <- Sys.time()
+    raw_grouped <- obiwarp_align(feature_data, profStep = 1, centerSample = 1, bw=bws[[n]], binsize=binsizes[[n]])
+    write_results(raw_grouped, paste0('E:/workspace/', data_name, '_results_', feature_source, '/xcms/', data_name,'_aligned_xcms_obiwarp.csv'))
+    end_time_obiwarp <- Sys.time()
+    timecost_obiwarp <- end_time_obiwarp - start_time_obiwarp
+    timecost_obiwarp_seconds <- as.numeric(timecost_obiwarp, units = "secs")
+    result <- paste(data_name, feature_source, timecost_obiwarp_seconds, sep = "_")
+    print(result)
+    timecost_results <- rbind(timecost_results, 
+                               data.frame(DataName = data_name, 
+                                          FeatureSource = feature_source, 
+                                          TimeCostSeconds = timecost_obiwarp_seconds))
+  }
+  n = n + 1
+}
+print(timecost_results)
+```

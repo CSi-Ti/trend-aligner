@@ -1,0 +1,255 @@
+---
+title: 'R Notebook'
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Load XCMS library
+```{r}
+library(BiocParallel)
+library(MSnbase)
+library(BiocGenerics)
+library(Biobase)
+library(S4Vectors)
+library(ProtGenerics)
+library(xcms)
+library(tools)
+register(SerialParam())
+```
+
+
+Define functions
+```{r}
+load_mzml = function(data_name) {
+  tmp_path = "E:/workspace"
+  mzml_path = file.path(tmp_path, data_name, 'profile_mzml/')
+  mzmls = list.files(path = mzml_path, pattern = '.mzML',recursive = TRUE,full.names = TRUE)
+  
+  pd = data.frame(sample_name = sub(basename(mzmls), pattern = '.mzML', replacement = '', fixed = TRUE), stringsAsFactors = FALSE)
+  xdata = readMSData(files = mzmls, pdata = new('NAnnotatedDataFrame',pd),mode = 'onDisk')
+  return(xdata)
+}
+
+extract_file_names <- function(data_name) {
+  tmp_path = "E:/workspace"
+  mzml_path = file.path(tmp_path, data_name, 'profile_mzml/')
+  mzmls = list.files(path = mzml_path, pattern = '.mzML',recursive = TRUE,full.names = TRUE)
+  file_names <- c()  
+  
+  for (path in mzmls) {
+    file_name <- basename(path)  
+    file_name <- sub("\\.mzML$", "", file_name) 
+    file_names <- c(file_names, file_name)  
+  }
+  
+  return(file_names)  
+}
+
+save_feature = function(feature, data_name, sample_names){
+  tmp_path = "E:/workspace"
+  mzml_path = file.path(tmp_path, data_name, 'profile_mzml/')
+  mzmls = list.files(path = mzml_path, pattern = '.mzML',recursive = TRUE,full.names = TRUE)
+  file_names <- list()
+  for (path in mzmls) {
+  file_name <- file_path_sans_ext(basename(path))
+  file_names <- c(file_names, list(file_name))
+}
+  grouped_data <- split(feature, feature$sample)
+  for (group_num in names(grouped_data)) {
+    group_df <- grouped_data[[group_num]]
+    sample_name <- file_names[as.numeric(group_num)]
+    csv_file_name <- paste0(tmp_path, '/original_feature_xcms/', data_name, '/', sample_name, '.csv')
+    write.csv(group_df, file = csv_file_name, row.names = FALSE)
+    }
+}
+```
+
+
+
+sample_names
+```{r}
+MTBLS733_QE_HF_samples = c('SA1', 'SA2', 'SA3', 'SA4', 'SA5', 'SB1', 'SB2', 'SB3', 'SB4', 'SB5')
+MTBLS736_TripleTOF_6600_samples = c('SampleA_1', 'SampleA_2', 'SampleA_3', 'SampleA_4', 'SampleB_1', 'SampleB_2', 'SampleB_3', 'SampleB_4')
+MTBLS3038_NEG_samples = c('12-1G','12-1M','12-2G','12-2M','12-3G','12-3M','12-4G','12-4M','17-1G','17-1M','17-2G','17-2M','17-3G','17-3M', '17-4G','17-4M','2-1G','2-1M','2-2G','2-2M','2-3G','2-3M','2-4G','2-4M','21-1G','21-1M','21-2G','21-2M','21-3G','21-3M','21-4G','21-4M','7-1G','7-1M','7-2G','7-2M','7-3G','7-3M','7-4G','7-4M','QC01','QC02','QC03','QC04','QC05')
+
+MTBLS3038_POS_samples = c('12-1G','12-1M','12-2G','12-2M','12-3G','12-3M','12-4G','12-4M','17-1G','17-1M','17-2G','17-2M','17-3G','17-3M', '17-4G','17-4M','2-1G','2-1M','2-2G','2-2M','2-3G','2-3M','2-4G','2-4M','21-1G','21-1M','21-2G','21-2M','21-3G','21-3M','21-4G','21-4M','7-1G','7-1M','7-2G','7-2M','7-3G','7-3M','7-4G','7-4M','QC01','QC02','QC03','QC04','QC05')
+
+MTBLS5430_Lip_NEG_samples = c('BA_1h_1', 'BA_1h_2', 'BA_1h_3', 'BA_24h_1','BA_24h_2', 'BA_24h_3', 'BA_24h_4', 'BA_24h_5', 'BA_3h_1', 'BA_3h_2', 'BA_3h_3', 'BA_6h_1', 'BA_6h_2', 'BA_6h_3', 'BA_Cont1', 'BA_Cont2', 'BA_Cont3','DR_1h_1', 'DR_1h_2', 'DR_1h_3','blank1', 'blank2', 'blank3','DR_24h_1', 'DR_24h_2','DR_24h_3', 'DR_3h_1', 'DR_3h_2', 'DR_3h_3', 'DR_6h_1', 'DR_6h_2', 'DR_6h_3', 'DR_Cont1','DR_Cont2', 'DR_Cont3', 'QC1', 'QC2', 'QC3', 'QC4', 'QC5', 'QC6')
+MTBLS5430_Lip_POS_samples = c('BA_1h_1', 'BA_1h_2', 'BA_1h_3', 'BA_24h_1','BA_24h_2', 'BA_24h_3', 'BA_24h_4', 'BA_24h_5', 'BA_3h_1', 'BA_3h_2', 'BA_3h_3', 'BA_6h_1', 'BA_6h_2', 'BA_6h_3', 'BA_Cont1', 'BA_Cont2', 'BA_Cont3','DR_1h_1', 'DR_1h_2', 'DR_1h_3','blank1', 'blank2', 'blank3','DR_24h_1', 'DR_24h_2','DR_24h_3', 'DR_3h_1', 'DR_3h_2', 'DR_3h_3', 'DR_6h_1', 'DR_6h_2', 'DR_6h_3', 'DR_Cont1','DR_Cont2', 'DR_Cont3', 'QC1', 'QC2', 'QC3', 'QC4', 'QC5', 'QC6')
+MTBLS5430_Metabo_NEG_samples = c('BA_1h_1', 'BA_1h_2', 'BA_1h_3', 'BA_24h_1','BA_24h_2', 'BA_24h_3', 'BA_24h_4', 'BA_24h_5', 'BA_3h_1', 'BA_3h_2', 'BA_3h_3', 'BA_6h_1', 'BA_6h_2', 'BA_6h_3', 'BA_Cont1', 'BA_Cont2', 'BA_Cont3','blank1', 'blank2', 'blank3','DR_1h_1', 'DR_1h_2', 'DR_1h_3','DR_24h_1', 'DR_24h_2','DR_24h_3', 'DR_3h_1', 'DR_3h_2', 'DR_3h_3', 'DR_6h_1', 'DR_6h_2', 'DR_6h_3', 'DR_Cont1','DR_Cont2', 'DR_Cont3', 'QC1', 'QC2', 'QC3', 'QC4', 'QC5', 'QC6')
+MTBLS5430_Metabo_POS_samples = c('BA_1h_1', 'BA_1h_2', 'BA_1h_3', 'BA_24h_1','BA_24h_2', 'BA_24h_3', 'BA_24h_4', 'BA_24h_5', 'BA_3h_1', 'BA_3h_2', 'BA_3h_3', 'BA_6h_1', 'BA_6h_2', 'BA_6h_3', 'BA_Cont1', 'BA_Cont2', 'BA_Cont3','blank1', 'blank2', 'blank3','DR_1h_1', 'DR_1h_2', 'DR_1h_3','DR_24h_1', 'DR_24h_2','DR_24h_3', 'DR_3h_1', 'DR_3h_2', 'DR_3h_3', 'DR_6h_1', 'DR_6h_2', 'DR_6h_3', 'DR_Cont1','DR_Cont2', 'DR_Cont3', 'QC1', 'QC2', 'QC3', 'QC4', 'QC5', 'QC6')
+
+AT_samples = c('0_1', '0_2', '0_3', '24_1', '24_2', '24_3', '36_1', '36_2', '36_3', '48_1', '48_2', '48_3', '60_1', '60_2', '60_3', '72_1', '72_2', '72_3')
+EC_H_samples = c('02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21')
+UPS_M_samples = c('A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3')
+UPS_Y_samples = c('A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3')
+Benchmark_FC_samples = c('10_R1','10_R2','10_R3','15_R1','15_R2','15_R3','20_R1','20_R2','20_R3','25_R1','25_R2','25_R3')
+
+
+
+```
+
+
+
+
+```{r eval= False, warning=FALSE}
+# MTBLS733_QE_HF
+MTBLS733_QE_HF_xdata <- load_mzml(data_name = 'MTBLS733_QE_HF')
+cwp = CentWaveParam(peakwidth = c(20,60), noise  = 100000, prefilter = c(3,500000), mzdiff = 0.001)
+MTBLS733_QE_HF_feature = findChromPeaks(MTBLS733_QE_HF_xdata, param = cwp)
+result = as.data.frame(chromPeaks(MTBLS733_QE_HF_feature))
+save_feature(result, 'MTBLS733_QE_HF', MTBLS733_QE_HF_samples)
+```
+
+
+
+
+```{r warning=FALSE}
+# TripleTOF_6600
+wiff_xdata <- load_mzml(data_name = 'MTBLS736_TripleTOF_6600')
+cwp = CentWaveParam(peakwidth = c(20,60), noise  = 100000, prefilter = c(6,5000))
+MTBLS736_TripleTOF_6600_feature = findChromPeaks(wiff_xdata, param = cwp)
+result = as.data.frame(chromPeaks(MTBLS736_TripleTOF_6600_feature))
+save_feature(result, 'MTBLS736_TripleTOF_6600', MTBLS736_TripleTOF_6600_samples)
+```
+
+
+
+
+```{r warning=FALSE}
+# MTBLS3038_NEG
+MTBLS3038_NEG_xdata <- load_mzml(data_name = 'MTBLS3038_NEG')
+cwp = CentWaveParam(peakwidth = c(3,60), noise  = 50, prefilter = c(3,100))
+MTBLS3038_NEG_feature = findChromPeaks(MTBLS3038_NEG_xdata, param = cwp)
+result = as.data.frame(chromPeaks(MTBLS3038_NEG_feature))
+save_feature(result, 'MTBLS3038_NEG', MTBLS3038_NEG_samples)
+```
+
+
+
+
+```{r warning=FALSE}
+# MTBLS3038_POS
+MTBLS3038_POS_xdata <- load_mzml(data_name = 'MTBLS3038_POS')
+cwp = CentWaveParam(peakwidth = c(3,60), noise  = 5000, prefilter = c(3, 10000), mzdiff = 0.001)
+MTBLS3038_POS_feature = findChromPeaks(MTBLS3038_POS_xdata, param = cwp)
+result = as.data.frame(chromPeaks(MTBLS3038_POS_feature))
+save_feature(result, 'MTBLS3038_POS', MTBLS3038_POS_samples)
+```
+
+
+
+
+```{r warning=FALSE}
+# MTBLS5430_Lip_NEG
+MTBLS5430_Lip_NEG_xdata <- load_mzml(data_name = 'MTBLS5430_Lip_NEG')
+cwp = CentWaveParam(peakwidth = c(3,60), noise  = 50000, prefilter = c(3,100000), mzdiff = 0.01)
+MTBLS5430_Lip_NEG_feature = findChromPeaks(MTBLS5430_Lip_NEG_xdata, param = cwp)
+result = as.data.frame(chromPeaks(MTBLS5430_Lip_NEG_feature))
+save_feature(result, 'MTBLS5430_Lip_NEG', MTBLS5430_Lip_NEG_samples)
+```
+
+
+
+
+
+
+```{r warning=FALSE}
+# MTBLS5430_Lip_POS
+MTBLS5430_Lip_POS_xdata <- load_mzml(data_name = 'MTBLS5430_Lip_POS')
+cwp = CentWaveParam(peakwidth = c(3,60), noise  = 10000, prefilter = c(6,10000), mzdiff = 0.01)
+MTBLS5430_Lip_POS_feature = findChromPeaks(MTBLS5430_Lip_POS_xdata, param = cwp)
+result = as.data.frame(chromPeaks(MTBLS5430_Lip_POS_feature))
+save_feature(result, 'MTBLS5430_Lip_POS', MTBLS5430_Lip_POS_samples)
+```
+
+
+
+
+
+
+```{r warning=FALSE}
+# MTBLS5430_Metabo_NEG
+MTBLS5430_Metabo_NEG_xdata <- load_mzml(data_name = 'MTBLS5430_Metabo_NEG')
+cwp = CentWaveParam(peakwidth = c(20,60), noise  = 10000, prefilter = c(6,5000))
+MTBLS5430_Metabo_NEG_feature = findChromPeaks(MTBLS5430_Metabo_NEG_xdata, param = cwp)
+result = as.data.frame(chromPeaks(MTBLS5430_Metabo_NEG_feature))
+save_feature(result, 'MTBLS5430_Metabo_NEG', MTBLS5430_Metabo_NEG_samples)
+```
+
+
+
+
+
+```{r warning=FALSE}
+# MTBLS5430_Metabo_POS
+MTBLS5430_Metabo_POS_xdata <- load_mzml(data_name = 'MTBLS5430_Metabo_POS')
+cwp = CentWaveParam(peakwidth = c(20,60), noise  = 10000, prefilter = c(6,5000))
+MTBLS5430_Metabo_POS_feature = findChromPeaks(MTBLS5430_Metabo_POS_xdata, param = cwp)
+result = as.data.frame(chromPeaks(MTBLS5430_Metabo_POS_feature))
+save_feature(result, 'MTBLS5430_Metabo_POS', MTBLS5430_Metabo_POS_samples)
+```
+
+
+
+
+```{r eval= True, warning=FALSE}
+# AT
+AT_xdata <- load_mzml(data_name = 'AT')
+cwp = CentWaveParam(peakwidth = c(20,60), noise  = 1.0E7, prefilter = c(6,5.0E6))
+AT_feature = findChromPeaks(AT_xdata, param = cwp)
+result = as.data.frame(chromPeaks(AT_feature))
+save_feature(result, 'AT', AT_samples)
+```
+
+
+
+```{r eval= True, warning=FALSE}
+# EC_H
+EC_H_xdata <- load_mzml(data_name = 'EC_H')
+cwp = CentWaveParam(peakwidth = c(20,60), noise  = 1.0E7, prefilter = c(6,5.0E6))
+EC_H_feature = findChromPeaks(EC_H_xdata, param = cwp)
+result = as.data.frame(chromPeaks(EC_H_feature))
+save_feature(result, 'EC_H', EC_H_samples)
+```
+
+
+```{r eval= False, warning=FALSE}
+# Benchmark_FC
+Benchmark_FC_xdata <- load_mzml(data_name = 'Benchmark_FC')
+cwp = CentWaveParam(peakwidth = c(20,60), noise  = 1.0E7, prefilter = c(6,5.0E6))
+Benchmark_FC_feature = findChromPeaks(Benchmark_FC_xdata, param = cwp)
+result = as.data.frame(chromPeaks(Benchmark_FC_feature))
+save_feature(result, 'Benchmark_FC', Benchmark_FC_samples)
+```
+
+
+
+```{r eval= True, warning=FALSE}
+# UPS_M
+UPS_M_xdata <- load_mzml(data_name = 'UPS_M')
+cwp = CentWaveParam(peakwidth = c(20,60), noise  = 1.0E7, prefilter = c(6,5.0E6))
+UPS_M_feature = findChromPeaks(UPS_M_xdata, param = cwp)
+result = as.data.frame(chromPeaks(UPS_M_feature))
+save_feature(result, 'UPS_M', UPS_M_samples)
+```
+
+
+
+
+```{r eval= True, warning=FALSE}
+# UPS_Y
+UPS_Y_xdata <- load_mzml(data_name = 'UPS_Y')
+cwp = CentWaveParam(peakwidth = c(20,60), noise  = 1.0E7, prefilter = c(6,5.0E6))
+UPS_Y_feature = findChromPeaks(UPS_Y_xdata, param = cwp)
+result = as.data.frame(chromPeaks(UPS_Y_feature))
+save_feature(result, 'UPS_Y', UPS_Y_samples)
+```
+
+
+
+
+
