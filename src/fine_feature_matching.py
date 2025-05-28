@@ -98,29 +98,6 @@ def estimate_qi_and_match(feature_list_raw, feature_list_calibrated, pu, match_m
     match_result = []
     for f in range(len(feature_list_calibrated)):
         matches = []
-        # if f == 0:
-        #     import os
-        #     import pandas as pd
-        #     lib = pd.read_csv(os.path.join("E:\workspace\MTBLS736_TripleTOF_6600\MTBLS736_TripleTOF_6600_annotated.csv"))
-        #     error = {}
-        # if f == 1:
-        #     import matplotlib.pyplot as plt
-        #     df_error = pd.DataFrame(error).T
-        #     plt.figure(figsize=(10, 8))
-        #     for column in df_error.columns:
-        #         plt.scatter(df_error.index, df_error[column], label=column, s=5)
-        #     plt.rcParams['savefig.dpi'] = 600
-        #
-        #     plt.title("MTBLS736_TripleTOF_6600", fontsize=25, fontweight='regular', fontfamily='Arial', pad=20)
-        #     plt.xlabel("RT(min)", fontsize=25, fontweight='regular', fontfamily='Arial', labelpad=5)
-        #     plt.ylabel("RT shift(min)", fontsize=25, fontweight='regular', fontfamily='Arial', labelpad=5)
-        #     plt.ylim(-0.6, 0.48)
-        #     plt.tick_params(axis='both', which='major', labelsize=20)  # 设置主刻度标签大小
-        #     plt.tick_params(axis='both', which='minor', labelsize=20)  # 设置次刻度标签大小
-        #     plt.subplots_adjust(left=0.2)
-        #
-        #     # plt.savefig(os.path.join("E:\workspace_plot\performance", dataset_name + ".png"), bbox_inches='tight')
-        #     plt.show()
         for i in range(len(feature_list_calibrated[f])):
             target = feature_list_calibrated[f][i]
             matched_normed_drifts = []
@@ -154,35 +131,6 @@ def estimate_qi_and_match(feature_list_raw, feature_list_calibrated, pu, match_m
 
             # Find the nearest match by predicted RT
             pred_rts = target[1] + (pu - pu[f]) * qi
-            # if f == 0:
-            #     gloabal_residual = []
-            #     for m in range(len(warp_funcs)):
-            #         if m == 0:
-            #             residual = 0
-            #         else:
-            #             residual = warp_funcs[m](target[1]) - target[1]
-            #         gloabal_residual.append(residual)
-            #     pred_rts_plot = pred_rts - np.array(gloabal_residual)
-            #     raw_target = feature_list[f][i]
-            #     matched_index = None
-            #     for idx, row in lib.iloc[:, [5, 6, 7]].iterrows():
-            #         if raw_target[0]-0.01 < row[0] < raw_target[0]+0.01:
-            #             if raw_target[1]-0.1 < row[1] < raw_target[1]+0.1:
-            #                 if abs(raw_target[2]-row[2])/row[2] < 1e-6:
-            #                     matched_index = idx
-            #                     break
-            #     if matched_index is not None:
-            #         row = lib.iloc[matched_index]
-            #         rt_columns = [col for col in lib.columns if col.endswith('_Rt')]
-            #         rt_condition = [col for col in lib.columns if col.endswith('_ManStatus')]
-            #         rt_values = row[rt_columns].values
-            #         condition_values = row[rt_condition].values
-            #         match_diff = np.where(condition_values == "Success", rt_values - pred_rts_plot, 0)
-            #         new_key = raw_target[1]
-            #         while new_key in error:
-            #             new_key += 1e-4
-            #         if len(match_diff) > 0:
-            #             error[new_key] = match_diff
             match = np.ones(len(feature_list_calibrated)) * -1
             match[f] = i
             for j in range(f + 1, len(feature_list_calibrated)):
