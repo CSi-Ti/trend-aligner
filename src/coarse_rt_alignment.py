@@ -1,4 +1,4 @@
-# Copyright (c) [2025] [Ruimin Wang, Shouyang Ren, Etienne Caron and Changbin Yu]
+# Copyright (c) [2025] [Ruimin Wang, Shouyang Ren and Changbin Yu]
 # Trend-Aligner is licensed under Mulan PSL v2.
 # You can use this software according to the terms and conditions of the Mulan PSL v2.
 # You may obtain a copy of Mulan PSL v2 at:
@@ -192,7 +192,6 @@ def select_f(x, y, d=1, max_iter=3, f_bounds=(0.1, 0.9)):
     warnings.filterwarnings("ignore", category=RuntimeWarning,
                             message="Method 'bounded' does not support relative tolerance in x; defaulting to absolute tolerance.")
 
-    # Step 1: initial non-robust PRESS optimization
     res = minimize_scalar(
         lambda f: compute_press(x, y, f, d=d),
         bounds=f_bounds,
@@ -202,14 +201,12 @@ def select_f(x, y, d=1, max_iter=3, f_bounds=(0.1, 0.9)):
     f_current = res.x
     robust_weights = np.ones(len(x))
 
-    # Step 2-3: robust iterative optimization
     for _ in range(max_iter):
         residuals = np.array([y[i] - lowess_fit(x, y, x[i], f_current, d) for i in range(len(x))])
         s = np.median(np.abs(residuals))
         u = residuals / (6 * s)
         robust_weights = (1 - u**2)**2 * (np.abs(u) <= 1)
 
-        # updated PRESS optimization (with robust weights)
         res = minimize_scalar(
             lambda f: compute_press(x, y, f, d=d, robust_weights=robust_weights),
             bounds=f_bounds,

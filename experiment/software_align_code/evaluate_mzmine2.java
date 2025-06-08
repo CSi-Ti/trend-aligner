@@ -158,8 +158,8 @@ public class evaluate_mzmine2 {
                 File dataFile = new File("E:\\workspace\\" + dataName + "\\" + featureSource);
                 File[] dataFiles = dataFile.listFiles();
                 double mz_tolerance = mz_tolerances[n];
-                double rt_before = rt_befores[0];
-                double rt_after = rt_afters[0];
+                double rt_before = rt_befores[n];
+                double rt_after = rt_afters[n];
 
                 if (dataFiles != null) {
                     String[] filePaths = new String[dataFiles.length];
