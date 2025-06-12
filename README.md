@@ -48,13 +48,13 @@ area_col_num:   Column index (1-based) containing peak area/intensity values [re
 ```
 ### CoarseAlignmentParams
 ```
-mz_tolerance:   The m/z tolerance (Da/ppm) in anchor-based pairwise matching [default=5]
+mz_tolerance:   The m/z tolerance (Da/ppm) in anchor-based pairwise matching [default=0.01]
 
-use_ppm:        Use ppm instead of Da for m/z tolerances [default=True]
+use_ppm:        Use ppm instead of Da for m/z tolerances [default=False]
 
 centric_idx:    Index of the reference sample used as alignment anchor (0=first sample by ASCII order) [default=0]
 
-rt_tolerance:   The RT tolerance (in minutes) in anchor-based pairwise matching [default=0.5]
+rt_tolerance:   The RT tolerance (in minutes) in anchor-based pairwise matching [default=3]
 
 frac:           LOWESS smoothing parameter: float value (0<frac<=1) for manual bandwidth or 'tPRESS' for automatic adaptation [default='tPRESS']
                 • The larger frac, the smoother the fitted LOWESS regression curve.

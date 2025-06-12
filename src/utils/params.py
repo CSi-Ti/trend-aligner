@@ -19,8 +19,8 @@ class FeatureListReadingParams:
 
 
 class CoarseAlignmentParams:
-    def __init__(self, centric_idx=0, from_rt=0, to_rt=float('inf'), mz_tolerance=5, use_ppm=True,
-                 rt_tolerance=0.5, frac='tPRESS'):
+    def __init__(self, centric_idx=0, from_rt=0, to_rt=float('inf'), mz_tolerance=0.01, use_ppm=False,
+                 rt_tolerance=3, frac='tPRESS'):
 
         self.centric_idx = centric_idx
         self.mz_tolerance = mz_tolerance

@@ -9,6 +9,7 @@
 # See the Mulan PSL v2 for more details.
 
 import os
+import glob
 import pandas as pd
 import numpy as np
 from scipy.spatial import cKDTree
@@ -24,7 +25,6 @@ def filtering_feature(aligned_feature_paths):
         feature_df = pd.read_csv(path, sep=",")
         feature_df = feature_df.iloc[:, 4:].replace(-1, 0)
         feature_dict[index] = feature_df
-
     first_df = next(iter(feature_dict.values()))
     num_samples = len(first_df.columns) // 3
     df_list = list(feature_dict.values())
@@ -182,7 +182,7 @@ def convert_feature_to_peptide(feature_source, align_method, feature_df, peptide
 
                 for index in matched_indices:
                     peptide_search_df.iloc[index, j] = sample_array[index, 2]
-                    peptide_match.append([peptide['Intensity']])
+                    peptide_match.append([peptide['Sequence']])
         peptide_match_dict[j] = peptide_match
         j += 1
 
@@ -209,26 +209,29 @@ def convert_feature_to_peptide(feature_source, align_method, feature_df, peptide
     return peptide_match_dict
 
 
-def collect_intensity_FC_maxquant(peptides_path, peptide_match_dict):
-    columns = ['Sequence', 'Proteins', 'Intensity 1_C011_20211231_7300ng_293T_27', 'Intensity 1_C011_20211231_9100ng_293T_9', 'Intensity 1_C011_20211231_9700ng_293T_3',
+def collect_intensity_FC_maxquant(peptides_path, feature_dict):
+    columns = ['Proteins', 'Intensity 1_C011_20211231_7300ng_293T_27', 'Intensity 1_C011_20211231_9100ng_293T_9', 'Intensity 1_C011_20211231_9700ng_293T_3',
                'Intensity 2_C008_20211231_7300ng_293T_27', 'Intensity 2_C008_20211231_9100ng_293T_9', 'Intensity 2_C008_20211231_9700ng_293T_3',
                'Intensity 3_C009_20211231_7300ng_293T_27', 'Intensity 3_C009_20211231_9100ng_293T_9', 'Intensity 3_C009_20211231_9700ng_293T_3']
     df = pd.read_csv(peptides_path, sep='\t', usecols=columns)
     df = df[df['Proteins'].str.contains('ECOLI', na=False)]
     df = df.drop('Proteins', axis=1)
-    df = df.drop('Sequence', axis=1)
+    feature_df = feature_dict[0]
+    area_df = feature_df.filter(like='area', axis=1)
     for n in range(0, len(df.columns)):
         peptide_area = df.iloc[:, n]
-        library = peptide_match_dict[n]
-        library = pd.DataFrame(library, columns=['area'])
-        for index, area in enumerate(peptide_area):
+        feature_area = area_df.iloc[:, n]
+        for index in peptide_area.index:
+            area = peptide_area[index]
             if area == 0:
                 continue
-            intensity_match = np.abs(library['area'] - area) / area < 1.0e-6
+            intensity_match = np.abs(feature_area - area) / area < 1.0e-6
             if intensity_match.any():
+                true_count = np.sum(intensity_match)
+                print(f"intensity_match 中有 {true_count} 个 True 值")
                 continue
             else:
-                df.iloc[index, n] = 0
+                df.loc[index, df.columns[n]] = 0
     df = df.loc[~(df == 0).all(axis=1)]
     df.to_csv(r"E:\Benchmark-MV\Benchmark-MV_results_peptide_matrix\maxquant\maxquant\peptides_MBR.csv", index=False)
     for column in df.columns:
@@ -265,9 +268,38 @@ def find_density_thresholds(data, threshold=0.1):
     return left_x, right_x
 
 def get_threshold():
-    threshold_all = []
-    peptide_matrix = pd.read_csv(r"E:\Benchmark-MV\Benchmark-MV_results_peptide_matrix\maxquant\maxquant\peptides_MBR.csv")
-    for column_base in peptide_matrix.columns:
+    peptide_matrix = pd.read_csv(r"E:\Benchmark-MV\Benchmark-MV_results_peptide_matrix\maxquant\trend-aligner\peptide_matrix_trend-aligner_after_MBR.csv")
+    column_base = peptide_matrix.columns[-3]
+    threshold_dict = {}
+    int_ratio = pd.DataFrame()
+    for column_search in peptide_matrix.columns:
+        if column_search == column_base:
+                continue
+        col = column_search + '/' + column_base
+        ratio = peptide_matrix[column_search] / peptide_matrix[column_base]
+        int_ratio[col] = np.log(ratio) / np.log(3)
+        int_ratio = int_ratio.replace([0, np.inf, -np.inf], np.nan)
+    n = 0
+    for col in int_ratio.columns:
+        kde = gaussian_kde(int_ratio[col].dropna())
+        x = np.linspace(int_ratio[col].dropna().min(), int_ratio[col].dropna().max(), 500)
+        peak = x[kde(x).argmax()]
+        threshold_dict[n] = {
+            'top_edge': peak + 0.3,
+            'down_edge': peak - 0.3
+        }
+        n += 1
+    return threshold_dict
+
+def remove_error_and_collect_intensity(paths, methods, threshold_dict):
+    for path, method in zip(paths, methods):
+        peptide_matrix = pd.read_csv(path)
+        peptide_matrix = peptide_matrix[peptide_matrix.iloc[:, -3] != 0]
+        non_zero_counts = peptide_matrix.ne(0).sum()
+        print(method)
+        for count in non_zero_counts:
+            print(count)
+        column_base = peptide_matrix.columns[-3]
         int_ratio = pd.DataFrame()
         for column_search in peptide_matrix.columns:
             if column_search == column_base:
@@ -276,139 +308,76 @@ def get_threshold():
             ratio = peptide_matrix[column_search] / peptide_matrix[column_base]
             int_ratio[col] = np.log(ratio) / np.log(3)
         int_ratio = int_ratio.replace([0, np.inf, -np.inf], np.nan)
-        threshold_dict = {}
-        n = 0
-        for col in int_ratio.columns:
-            left_bound, right_bound = find_density_thresholds(int_ratio[col].dropna(), threshold=0.1)
-            threshold_dict[n] = {
-                'top_edge': right_bound + 0.1,
-                'down_edge': left_bound - 0.1
-            }
-            n += 1
-        threshold_all.append(threshold_dict)
-    return threshold_all
 
-def remove_error_and_collect_intensity(paths, methods, threshold_all):
-    for path, method in zip(paths, methods):
-        peptide_matrix = pd.read_csv(path)
-        non_zero_counts = peptide_matrix.ne(0).sum()
-        for count in non_zero_counts:
-            print(count)
-        peptide_matrix_copy = peptide_matrix
-        score_matrix = pd.DataFrame(np.zeros((len(peptide_matrix.index), len(peptide_matrix.columns))),
-                                    columns=peptide_matrix.columns, index=peptide_matrix.index)
-        n = 0
-        for column_base in peptide_matrix.columns:
-            int_ratio = pd.DataFrame()
-            for column_search in peptide_matrix.columns:
-                if column_search == column_base:
-                    continue
-                col = column_search + '/' + column_base
-                ratio = peptide_matrix[column_search] / peptide_matrix[column_base]
-                int_ratio[col] = np.log(ratio) / np.log(3)
-            int_ratio = int_ratio.replace([0, np.inf, -np.inf], np.nan)
+        plt.figure(figsize=(8, 5), dpi=600)
+        sns.boxplot(data=int_ratio)
+        plt.xticks(rotation=45, ha='right')
+        plt.ylim(-5, 5)
+        plt.title(f"{method}: Intensity ratio based on 2700R3")
+        plt.tight_layout()
+        output_path = f"E:\\workspace_plot\\peptide_intensity\\{method}.png"
+        plt.savefig(output_path, dpi=600, bbox_inches='tight')
+        plt.show()
 
-            if n == 0:
-                plt.figure(figsize=(8, 5), dpi=600)
-                sns.boxplot(data=int_ratio)
-                plt.xticks(rotation=45, ha='right')
-                plt.ylim(-5, 5)
-                plt.title(f"{method}: Intensity ratio based on 2700R1")
-                plt.tight_layout()
-                output_path = f"E:\\workspace_plot\\peptide_intensity\\{method}.png"
-                plt.savefig(output_path, dpi=600, bbox_inches='tight')
-                plt.show()
-
-            results = threshold_all[n]
-            keys = []
-            for key in results:
-                keys.append(key)
-
-            error_ratio = []
-            for index, row in int_ratio.iterrows():
-                R = 0
-                E = 0
-                i = 0
-                for col in row.index:
-                    key = keys[i]
+        #error_peptide_removal
+        for index, row in int_ratio.iterrows():
+            i = 0
+            for col in row.index:
+                value = row[col]
+                if np.isnan(value):
                     i += 1
-                    value = row[col]
-                    if np.isnan(value):
-                        continue
-                    top_edge = results[key]['top_edge']
-                    down_edge = results[key]['down_edge']
-                    if down_edge <= value <= top_edge:
-                        R += 1
-                        score_matrix.loc[index, col.split("/")[0]] += 1
-                    else:
-                        E += 1
-                error_ratio.append((R, E))
-            n += 1
-
-        max_scores = score_matrix.max(axis=1)
-        row_thresholds = max_scores
-        result = []
-        for idx, threshold in row_thresholds.items():
-            row_data = score_matrix.loc[idx]
-            if threshold == 0:
-                threshold += np.inf
-            if threshold < (peptide_matrix_copy.loc[idx] != 0).sum() * 1 / 2:
-                threshold += np.inf
-            cols = row_data[row_data < threshold].index.tolist()
-            result.extend([(idx, col) for col in cols])
-
-        for row_idx, col_name in result:
-            peptide_matrix_copy.loc[row_idx, col_name] = 0
-        n = 0
-        for column_base in peptide_matrix_copy.columns:
-            int_ratio = pd.DataFrame()
-            for column_search in peptide_matrix_copy.columns:
-                if column_search == column_base:
                     continue
-                col = column_search + '/' + column_base
-                int_ratio[col] = np.log2((peptide_matrix_copy[column_search] / peptide_matrix_copy[column_base]))
-            int_ratio = int_ratio.replace([0, np.inf, -np.inf], np.nan)
+                top_edge = threshold_dict[i]['top_edge']
+                down_edge = threshold_dict[i]['down_edge']
+                i += 1
+                if down_edge <= value <= top_edge:
+                    continue
+                else:
+                    int_ratio.loc[index, col] = np.nan
 
-            if n == 0:
-                plt.figure(figsize=(8, 5), dpi=600)
-                sns.boxplot(data=int_ratio)
-                plt.xticks(rotation=45, ha='right')
-                plt.ylim(-5, 5)
-                plt.title(f"{method}: Intensity ratio based on 2700R1")
-                plt.tight_layout()
-                output_path = f"E:\\workspace_plot\\peptide_intensity\\{method}_removed.png"
-                plt.savefig(output_path, dpi=600, bbox_inches='tight')
-                plt.show()
+        plt.figure(figsize=(8, 5), dpi=600)
+        sns.boxplot(data=int_ratio)
+        plt.xticks(rotation=45, ha='right')
+        plt.ylim(-5, 5)
+        plt.title(f"{method}: Intensity ratio based on 2700R3")
+        plt.tight_layout()
+        output_path = f"E:\\workspace_plot\\peptide_intensity\\{method}_removed.png"
+        plt.savefig(output_path, dpi=600, bbox_inches='tight')
+        plt.show()
+
+        counts = int_ratio.notna().sum()
+        n = 0
+        for count in counts:
+            if n == 6:
+                print(peptide_matrix[column_base].ne(0).sum())
+            print(count)
             n += 1
 
-        non_zero_counts = peptide_matrix_copy.ne(0).sum()
-        for count in non_zero_counts:
-            print(count)
 
 
 #workflow
-# #collect_maxquant_peptide_list
-# collect_maxquant_peptides(r"C:\Users\Nico\Downloads\combined\txt\evidence.txt")
+#collect_maxquant_peptide_list
+collect_maxquant_peptides(r"C:\Users\Nico\Downloads\combined\txt\evidence.txt")
 
-# peptide_folder = r"E:\Benchmark-MV\matched_peptide\maxquant_peptide"
-# peptide_paths = glob.glob(os.path.join(peptide_folder, "*.csv"))
-#
-# feature_dict = filtering_feature([r"E:\Benchmark-MV\results\Benchmark_MV_aligned_trend-aligner.csv",
-#                                     r"E:\Benchmark-MV\deeprtalign_results\Benchmark-MV_aligned_deeprtalign.csv",
-#                                     r"E:\Benchmark-MV\openms_results\Benchmark-MV_aligned_openms.csv",
-#                                     r"E:\Benchmark-MV\xcms_results\Benchmark-MV_aligned_xcms_group.csv",
-#                                     r"E:\Benchmark-MV\xcms_results\Benchmark-MV_aligned_xcms_obiwarp.csv",
-#                                     r"E:\Benchmark-MV\mzmine2_results\Benchmark-MV_aligned_mzmine2_ransac.csv",
-#                                     r"E:\Benchmark-MV\mzmine2_results\Benchmark-MV_aligned_mzmine2_join.csv"
-#                                                 ])
-#
-# methods = ['trend-aligner', 'deeprtalign', 'openms', 'xcms_group', 'xcms_obiwarp', 'mzmine2_ransac', 'mzmine2_join']
-# n = 0
-# for feature_df in feature_dict.values():
-#     peptide_match_dict = convert_feature_to_peptide('maxquant', methods[n], feature_df, peptide_paths, 'maxquant')
-#     n += 1
-#
-# collect_intensity_FC_maxquant(r"E:\Benchmark-MV\maxquant_results\peptides.txt", peptide_match_dict)
+peptide_folder = r"E:\Benchmark-MV\matched_peptide\maxquant_peptide"
+peptide_paths = glob.glob(os.path.join(peptide_folder, "*.csv"))
+
+feature_dict = filtering_feature([r"E:\Benchmark-MV\results\Benchmark-MV_aligned_trend-aligner.csv",
+                                    r"E:\Benchmark-MV\deeprtalign_results\Benchmark-MV_aligned_deeprtalign.csv",
+                                    r"E:\Benchmark-MV\openms_results\Benchmark-MV_aligned_openms.csv",
+                                    r"E:\Benchmark-MV\xcms_results\Benchmark-MV_aligned_xcms_group.csv",
+                                    r"E:\Benchmark-MV\xcms_results\Benchmark-MV_aligned_xcms_obiwarp.csv",
+                                    r"E:\Benchmark-MV\mzmine2_results\Benchmark-MV_aligned_mzmine2_ransac.csv",
+                                    r"E:\Benchmark-MV\mzmine2_results\Benchmark-MV_aligned_mzmine2_join.csv"
+                                                ])
+
+methods = ['trend-aligner', 'deeprtalign', 'openms', 'xcms_group', 'xcms_obiwarp', 'mzmine2_ransac', 'mzmine2_join']
+n = 0
+for feature_df in feature_dict.values():
+    peptide_match_dict = convert_feature_to_peptide('maxquant', methods[n], feature_df, peptide_paths, 'maxquant')
+    n += 1
+
+collect_intensity_FC_maxquant(r"E:\Benchmark-MV\maxquant_results\peptides.txt", feature_dict)
 
 
 paths = [
@@ -423,5 +392,5 @@ paths = [
         ]
 methods = ['Trend-Aligner', 'DeepRTAlign', 'OpenMS', 'XCMS(Group)', 'XCMS(OBI-warp)', 'MZmine2(RANSAC)', 'MZmine2(Join)', 'MaxQuant']
 
-threshold_all = get_threshold()
-remove_error_and_collect_intensity(paths, methods, threshold_all)
+threshold_dict = get_threshold()
+remove_error_and_collect_intensity(paths, methods, threshold_dict)

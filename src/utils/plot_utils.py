@@ -21,7 +21,7 @@ def plt_lowess_fitting_results(candidate_from_rts, candidate_to_rts, result_lowe
     file_name = f"{timestamp}.png"
     save_path = os.path.join(save_path, file_name)
 
-    plt.scatter(candidate_from_rts, candidate_to_rts - candidate_from_rts, color='blue', label='Feature List A', alpha=0.5, s=4)
+    plt.scatter(candidate_from_rts, candidate_to_rts - candidate_from_rts, color='blue', alpha=0.5, s=4)
     plt.scatter(result_lowess[:, 0], result_lowess[:, 1] - result_lowess[:, 0], color='red', label='LOWESS', alpha=0.5, s=4)
     x_values = np.linspace(min(candidate_from_rts), max(candidate_from_rts), int(max(candidate_from_rts) - min(candidate_from_rts))).reshape(-1, 1)
     y_values = lowess_function(x_values)
