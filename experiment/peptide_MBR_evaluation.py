@@ -126,14 +126,12 @@ def convert_feature_to_peptide(feature_source, align_method, feature_df, peptide
     peptide_search_df = pd.DataFrame(0, index=range(num_rows), columns=range(num_columns))
     peptide_search_df.columns = col_names
 
-    peptide_match_dict = {}
     j = 0
     for i in range(0, 27, step):
         sample_df = feature_df.iloc[:, i:i + step]
         sample_array = sample_df.to_numpy()
         peptide_df = peptide_dict[j]
 
-        peptide_match = []
         for index, peptide in peptide_df.iterrows():
             if peptide_source == 'maxquant':
                 intensity_match = np.abs(sample_array[:, 2] - peptide['Intensity']) / peptide['Intensity'] < 1.0e-6
@@ -182,8 +180,6 @@ def convert_feature_to_peptide(feature_source, align_method, feature_df, peptide
 
                 for index in matched_indices:
                     peptide_search_df.iloc[index, j] = sample_array[index, 2]
-                    peptide_match.append([peptide['Sequence']])
-        peptide_match_dict[j] = peptide_match
         j += 1
 
     #MBR
@@ -206,7 +202,6 @@ def convert_feature_to_peptide(feature_source, align_method, feature_df, peptide
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     peptide_search_df.to_csv(out_path, index=False)
     print(align_method + " finished")
-    return peptide_match_dict
 
 
 def collect_intensity_FC_maxquant(peptides_path, feature_dict):
@@ -374,7 +369,7 @@ feature_dict = filtering_feature([r"E:\Benchmark-MV\results\Benchmark-MV_aligned
 methods = ['trend-aligner', 'deeprtalign', 'openms', 'xcms_group', 'xcms_obiwarp', 'mzmine2_ransac', 'mzmine2_join']
 n = 0
 for feature_df in feature_dict.values():
-    peptide_match_dict = convert_feature_to_peptide('maxquant', methods[n], feature_df, peptide_paths, 'maxquant')
+    convert_feature_to_peptide('maxquant', methods[n], feature_df, peptide_paths, 'maxquant')
     n += 1
 
 collect_intensity_FC_maxquant(r"E:\Benchmark-MV\maxquant_results\peptides.txt", feature_dict)

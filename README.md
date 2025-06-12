@@ -1,4 +1,4 @@
-# Trend-Aligner: a retention time modeling-based feature alignment method for untargeted LC-MS-based data analysis
+# Trend-Aligner: a retention time modeling-based feature alignment method for untargeted LC-MS data analysis
 
 
 ## Highlights
