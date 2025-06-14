@@ -222,8 +222,6 @@ def collect_intensity_FC_maxquant(peptides_path, feature_dict):
                 continue
             intensity_match = np.abs(feature_area - area) / area < 1.0e-6
             if intensity_match.any():
-                true_count = np.sum(intensity_match)
-                print(f"intensity_match 中有 {true_count} 个 True 值")
                 continue
             else:
                 df.loc[index, df.columns[n]] = 0
@@ -243,24 +241,6 @@ def collect_maxquant_peptides(evidence_path):
         group.to_csv(outpath, sep=',', header=True, index=False)
 
 
-
-def find_density_thresholds(data, threshold=0.1):
-    kde = gaussian_kde(data.dropna())
-    x = np.linspace(data.min(), data.max(), 1000)
-    y = kde(x)
-
-    peak_idx = y.argmax()
-    left_idx = peak_idx
-    while left_idx > 0 and y[left_idx] > threshold:
-        left_idx -= 1
-    left_x = x[left_idx] if left_idx > 0 else x[0]
-
-    right_idx = peak_idx
-    while right_idx < len(y) - 1 and y[right_idx] > threshold:
-        right_idx += 1
-    right_x = x[right_idx] if right_idx < len(y) - 1 else x[-1]
-
-    return left_x, right_x
 
 def get_threshold():
     peptide_matrix = pd.read_csv(r"E:\Benchmark-MV\Benchmark-MV_results_peptide_matrix\maxquant\trend-aligner\peptide_matrix_trend-aligner_after_MBR.csv")
